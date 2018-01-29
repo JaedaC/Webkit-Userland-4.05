@@ -4,29 +4,7 @@ window.syscalls = [];
 /* These are the offsets in libkernel for system call wrappers */
 window.syscallMap =
 {
-  '3.50':
-  {
-    20: 0xACE0,
-    24: 0xAD60
-  },
-
-  '3.55':
-  {
-    20: 0xACE0,
-    24: 0xAD60
-  },
-
-  '3.70':
-  {
-    20: 0xACE0,
-    24: 0xAD60
-  },
-
-  '4.00':
-  {
-    20: 0x06F0,
-    24: 0x0730
-  },
+ 
 '4.05':
   {
     20: 0x06F0,
@@ -34,19 +12,9 @@ window.syscallMap =
    608: 0x1F50,
    592: 0x1D70,
    593: 0x1D90,
-  },
-
-  '4.06':
-  {
-    20: 0x06F0,
-    24: 0x0730
-  },
-
-  '4.07':
-  {
-    20: 0x06F0,
-    24: 0x0730
   }
+
+  
 }
 
 /* A long ass map of system call names -> number, you shouldn't need to touch this */
