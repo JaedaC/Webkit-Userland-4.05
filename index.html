@@ -305,13 +305,13 @@
 {
  if(loop != "true"){
     var buffer = malloc(0x408);
-    syscall(592,malloc.add32(0x8), 256 , malloc); 
+    p.syscall(592,malloc.add32(0x8), 256 , malloc); 
     window.dumpMemory(buffer,0x408, ip);
 }
    else
 {
     var buffer = malloc(0x408);
-    syscall(592,malloc.add32(0x8), 256 , malloc);
+    p.syscall(592,malloc.add32(0x8), 256 , malloc);
     alert(); 
     var count = p.read4(buffer);
     sys_dynlib_get_info_ex_looped(count, buffer, ip)
@@ -325,7 +325,7 @@
 	var moduleHandle = parseInt(modhandl, 16);
 	var buffer = malloc(0x1a8);
 	p.write4(buffer, 0x1a8);
-	syscall(608, moduleHandle, 0, buffer);
+	p.syscall(608, moduleHandle, 0, buffer);
 	window.dumpMemory(buffer, 0x1a8, ip);
 }  
 
@@ -333,7 +333,7 @@ function sys_dynlib_get_info(modulehandl, ip)
 {   var moduleHandle = parseInt(modhandl, 16);
     var buffer = malloc(0x160);
       p.write8(buffer, 0x160);
-    syscall(593, moduleHandle,  buffer);
+    p.syscall(593, moduleHandle,  buffer);
      window.dumpMemory(buffer, 0x160, ip);
 }
 
@@ -344,7 +344,7 @@ function sys_dynlib_get_info_ex_looped(count,data, ip)
     for(var index = 0; index < count; index++)
         {
 			 p.write8((buffer+0x1a8*index), 0x1a8);
-             syscall(608, p.read4(data + index * 4), buffer.add32(index*0x1a8));
+             p.syscall(608, p.read4(data + index * 4), buffer.add32(index*0x1a8));
              window.dumpMemory(buffer, 0x1a8*count, ip);
 
         }
