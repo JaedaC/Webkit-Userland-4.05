@@ -1,3 +1,4 @@
+Edited this while sleeping, there are some errors left
 PS4 4.05 Code Execution
 ==============
 This is my edit of the previously released userland exploit.
